@@ -8,7 +8,7 @@
 // floats up off the fighter it hit, a win lands in a fall of embers.
 
 import { SUITS, cardById, effectText } from './cards.js';
-import { MAX_EMBER, MAX_LIFE } from './game.js';
+import { MAX_EMBER, MAX_LIFE, SLOTS, SURGE_EVERY } from './game.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -26,6 +26,21 @@ export function cardElement(card, options = {}) {
   if (options.playable) el.classList.add('playable');
   if (options.disabled) el.classList.add('unplayable');
   if (options.kindle) el.classList.add('kindle-ready');
+  if (options.selected) el.classList.add('selected');
+  // A played card wears exactly one badge: its Kindle, or its chain.
+  const badge = options.kindle
+    ? '<span class="kindle-tag">KINDLE +2</span>'
+    : options.chain === 'quench'
+      ? '<span class="chain-tag quench-tag">QUENCHED</span>'
+      : options.chain === 'ignite'
+        ? '<span class="chain-tag ignite-tag">IGNITED</span>'
+        : options.chain === 'flare'
+          ? '<span class="chain-tag flare-tag">FLARED</span>'
+          : options.ignited
+            ? '<span class="chain-tag ignite-tag">IGNITED</span>'
+            : '';
+  const slot = options.slot ? SLOTS.find((entry) => entry.id === options.slot) : null;
+  const slotTag = slot ? `<span class="slot-tag">${slot.name}</span>` : '';
   el.innerHTML =
     `<span class="cost" title="ember cost">${card.cost}</span>` +
     `<span class="suit-band"><svg class="suit-icon" aria-hidden="true"><use href="#${suit.icon}"></use></svg><span>${suit.name}</span></span>` +
@@ -33,7 +48,7 @@ export function cardElement(card, options = {}) {
     `<span class="card-name">${card.name}</span>` +
     `<span class="card-text">${effectText(card, options.bonus || 0)}</span>` +
     `<span class="power" title="power">${card.power + (options.bonus || 0)}</span>` +
-    (options.kindle ? '<span class="kindle-tag">KINDLE +2</span>' : '');
+    badge + slotTag;
   return el;
 }
 
@@ -55,6 +70,10 @@ export function createRenderer(doc) {
     aiShield: doc.getElementById('ai-shield'),
     aiHand: doc.getElementById('ai-hand'),
     intent: doc.getElementById('intent'),
+    brazier: doc.getElementById('brazier'),
+    battleLine: doc.getElementById('battle-line'),
+    slots: Array.from(doc.querySelectorAll('#battle-line .slot')),
+    chainHint: doc.getElementById('chain-hint'),
     playedRow: doc.getElementById('played-row'),
     log: doc.getElementById('log'),
     playerLifeFill: doc.getElementById('player-life-fill'),
@@ -63,6 +82,7 @@ export function createRenderer(doc) {
     playerHand: doc.getElementById('player-hand'),
     emberMeter: doc.getElementById('ember-meter'),
     emberText: doc.getElementById('ember-text'),
+    surgeMeter: doc.getElementById('surge-meter'),
     endTurn: doc.getElementById('end-turn'),
     titleOverlay: doc.getElementById('title-overlay'),
     endOverlay: doc.getElementById('end-overlay'),
@@ -72,6 +92,14 @@ export function createRenderer(doc) {
     confetti: doc.getElementById('confetti'),
     status: doc.getElementById('status'),
   };
+
+  // The slots are wired once; they call whatever UI the latest render gave.
+  let liveUi = null;
+  for (const slotEl of els.slots) {
+    slotEl.addEventListener('click', () => {
+      if (liveUi && liveUi.onPlaySlot) liveUi.onPlaySlot(slotEl.dataset.slot);
+    });
+  }
 
   let lastPlayerSig = '';
   let lastAiSig = '';
@@ -135,6 +163,7 @@ export function createRenderer(doc) {
    * click and for ending the turn.
    */
   function render(state, ui) {
+    liveUi = ui;
     const player = state.player;
     const ai = state.ai;
 
@@ -154,7 +183,7 @@ export function createRenderer(doc) {
 
     // The player's hand: rebuild only when it changes, so the deal animation
     // plays once and a card does not jump while the player reads it.
-    const playerSig = player.hand.join(',') + '|' + (ui.playableIds || []).join(',') + '|' + (ui.kindleSuit || '');
+    const playerSig = player.hand.join(',') + '|' + (ui.playableIds || []).join(',') + '|' + (ui.kindleSuit || '') + '|' + (ui.selectedIndex ?? '');
     if (playerSig !== lastPlayerSig) {
       lastPlayerSig = playerSig;
       els.playerHand.innerHTML = '';
@@ -168,9 +197,10 @@ export function createRenderer(doc) {
           disabled: !playable,
           kindle,
           bonus: kindle ? 2 : 0,
+          selected: ui.selectedIndex === index,
         });
         el.style.animationDelay = `${index * 70}ms`;
-        el.addEventListener('click', () => ui.onPlayCard(id));
+        el.addEventListener('click', () => ui.onPlayCard(index));
         els.playerHand.appendChild(el);
       });
     }
@@ -184,13 +214,56 @@ export function createRenderer(doc) {
     }
     els.emberText.textContent = `${player.ember} ember`;
 
-    // The table: the cards played this round, newest last, flipping in.
-    const tableSig = (state.table || []).map((play) => `${play.who}:${play.card.id}`).join(',');
+    // Ember Surge meter: three pips, lit for the Flame cards played this
+    // duel toward the next Surge; all three blaze when one just fired.
+    const surgePips = player.surge % SURGE_EVERY;
+    els.surgeMeter.innerHTML = '';
+    for (let i = 0; i < SURGE_EVERY; i += 1) {
+      const pip = doc.createElement('span');
+      pip.className = 'surge-pip' + (player.surgeFlash ? ' surge-lit' : i < surgePips ? ' lit' : '');
+      els.surgeMeter.appendChild(pip);
+    }
+
+    // The brazier burns hotter as the Surge nears, and bursts when it fires.
+    els.brazier.className = `hot-${surgePips}${player.surgeFlash ? ' burst' : ''}`;
+
+    // The battle line: when a card is chosen, its slots light up — the one
+    // that favours the card's suit brightest — and a click plays it there.
+    const selectedCard = ui.selectedIndex != null ? cardById(player.hand[ui.selectedIndex]) : null;
+    for (const slotEl of els.slots) {
+      const slot = SLOTS.find((entry) => entry.id === slotEl.dataset.slot);
+      slotEl.classList.toggle('lit', Boolean(selectedCard));
+      slotEl.classList.toggle('match', Boolean(selectedCard) && slot.suit === selectedCard.suit);
+    }
+
+    // Chain hint: after one card of a turn, name what the second card could do.
+    if (state.phase === 'play' && state.turn === 'player' && player.playedThisTurn.length === 1) {
+      const first = player.playedThisTurn[0];
+      els.chainHint.textContent =
+        first === 'flame'
+          ? 'Flame played — play Ash to Quench (+2 shield), or Flame to Kindle (+2).'
+          : first === 'ash'
+            ? 'Ash played — play Spark to Ignite (next Flame +2), or Ash to Kindle (+2).'
+            : 'Spark played — play Flame to Flare (+1 damage, draw 1), or Spark to Kindle (+2).';
+    } else {
+      els.chainHint.textContent = '';
+    }
+
+    // The table: the cards played this round, newest last, flipping in —
+    // each wearing its slot and its Kindle or chain badge.
+    const tableSig = (state.table || []).map((play) => `${play.who}:${play.card.id}:${play.slot || ''}:${play.chain || ''}:${play.ignited ? 'i' : ''}`).join(',');
     if (tableSig !== lastTableSig) {
       lastTableSig = tableSig;
       els.playedRow.innerHTML = '';
       for (const play of state.table || []) {
-        const el = cardElement(play.card, { tag: 'div', bonus: play.kindled ? 2 : 0 });
+        const el = cardElement(play.card, {
+          tag: 'div',
+          bonus: play.bonus || 0,
+          kindle: play.kindled,
+          chain: play.chain,
+          ignited: play.ignited,
+          slot: play.slot,
+        });
         el.classList.add('played', play.who === 'player' ? 'played-by-player' : 'played-by-ai');
         els.playedRow.appendChild(el);
       }

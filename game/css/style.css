@@ -18,9 +18,11 @@ html, body {
   flex-direction: column;
   padding: 6px 18px 4px;
   background:
-    radial-gradient(ellipse 90% 55% at 50% 108%, rgba(255, 122, 26, 0.30), transparent 65%),
-    radial-gradient(ellipse 70% 45% at 50% -8%, rgba(255, 210, 63, 0.10), transparent 60%),
-    linear-gradient(180deg, #241610 0%, #1a0f09 55%, #120a06 100%);
+    radial-gradient(ellipse 90% 55% at 50% 108%, rgba(255, 122, 26, 0.38), transparent 65%),
+    radial-gradient(ellipse 62% 42% at 50% 44%, rgba(255, 150, 50, 0.17), transparent 70%),
+    radial-gradient(ellipse 70% 45% at 50% -8%, rgba(255, 210, 63, 0.12), transparent 60%),
+    repeating-linear-gradient(115deg, rgba(255, 190, 110, 0.03) 0 2px, transparent 2px 7px),
+    linear-gradient(180deg, #2c1a10 0%, #211209 55%, #170d06 100%);
 }
 
 /* ---------- Fighters: name, life bar, shield ---------- */
@@ -105,9 +107,60 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   min-height: 0;
 }
+
+/* The brazier: the last flame itself. It burns hotter as the Ember Surge
+   nears, and bursts when one fires. */
+#brazier { height: 28px; display: flex; align-items: center; justify-content: center; }
+#brazier .suit-icon { width: 24px; height: 24px; color: #ff7a1a; filter: drop-shadow(0 0 6px rgba(255, 122, 26, 0.5)); transition: all 0.3s ease; }
+#brazier.hot-1 .suit-icon { width: 28px; height: 28px; filter: drop-shadow(0 0 10px rgba(255, 150, 40, 0.85)); }
+#brazier.hot-2 .suit-icon { width: 32px; height: 32px; color: #ffd23f; filter: drop-shadow(0 0 14px rgba(255, 180, 60, 0.95)); animation: brazier-flicker 1s ease-in-out infinite; }
+#brazier.burst .suit-icon { animation: brazier-burst 0.8s ease-out; }
+
+@keyframes brazier-flicker {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+@keyframes brazier-burst {
+  from { transform: scale(1.7); }
+  to { transform: scale(1); }
+}
+
+/* The battle line: three slots in the middle of the table. */
+#battle-line { display: flex; gap: 10px; justify-content: center; }
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 132px;
+  padding: 4px 6px 5px;
+  background: linear-gradient(180deg, rgba(64, 34, 12, 0.9), rgba(32, 17, 8, 0.9));
+  border: 2px solid #6b4423;
+  border-radius: 10px;
+  color: #ffd9a0;
+  font-family: inherit;
+  cursor: default;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.slot .suit-icon { width: 18px; height: 18px; }
+.slot[data-slot="vanguard"] .suit-icon { color: #ff7a1a; }
+.slot[data-slot="hearth"] .suit-icon { color: #9fb2c3; }
+.slot[data-slot="ember"] .suit-icon { color: #ffd23f; }
+
+.slot-name { font-size: 12px; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
+.slot-bonus { font-size: 11px; color: #d8c3a0; font-style: italic; }
+
+.slot.lit { border-color: #ffd23f; box-shadow: 0 0 12px rgba(255, 210, 63, 0.45); cursor: pointer; }
+.slot.lit:hover { transform: translateY(-2px); }
+.slot.match { border-color: #ff9a3d; box-shadow: 0 0 16px rgba(255, 150, 40, 0.7); }
+
+#chain-hint { min-height: 17px; font-size: 13px; font-style: italic; color: #ffd23f; text-align: center; }
 
 #played-row {
   display: flex;
@@ -151,6 +204,32 @@ html, body {
 }
 
 #ember-text { font-size: 15px; color: #ffd9a0; font-weight: bold; }
+
+/* Ember Surge meter: three flame pips beside the ember meter. */
+.surge-label { font-size: 14px; color: #ffb37a; font-weight: bold; margin-left: 10px; }
+#surge-meter { display: flex; gap: 4px; }
+
+.surge-pip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: #3a2415;
+  border: 1px solid #6b4423;
+}
+
+.surge-pip.lit {
+  background: radial-gradient(circle at 35% 35%, #ffd23f, #ff7a1a 70%);
+  border-color: #ffb37a;
+  box-shadow: 0 0 7px rgba(255, 150, 40, 0.8);
+}
+
+.surge-pip.surge-lit {
+  background: radial-gradient(circle at 35% 35%, #fff3b0, #ff7a1a 70%);
+  border-color: #ffe9c4;
+  box-shadow: 0 0 12px rgba(255, 200, 80, 1);
+  animation: brazier-flicker 0.5s ease-in-out infinite;
+}
 
 #player-hand {
   display: flex;
@@ -223,6 +302,7 @@ html, body {
 .card.playable:hover { transform: translateY(-14px) scale(1.04); box-shadow: 0 12px 22px rgba(0, 0, 0, 0.65); }
 .card.unplayable { filter: saturate(0.55) brightness(0.88); cursor: default; }
 .card.kindle-ready { outline: 3px solid #ffd23f; outline-offset: 2px; }
+.card.selected { transform: translateY(-14px) scale(1.04); outline: 3px solid #ffd23f; outline-offset: 2px; box-shadow: 0 12px 22px rgba(0, 0, 0, 0.65); }
 
 .card.suit-flame { border-top: 9px solid #ff7a1a; }
 .card.suit-ash { border-top: 9px solid #7e93a6; }
@@ -310,6 +390,38 @@ html, body {
   padding: 2px 6px;
 }
 
+/* A chain badge, same seat as the Kindle tag: a card wears exactly one. */
+.chain-tag {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: #2a1503;
+  border-radius: 8px;
+  padding: 2px 6px;
+}
+
+.quench-tag { background: #9fb2c3; }
+.ignite-tag { background: #ff9a3d; }
+.flare-tag { background: #ffd23f; }
+
+/* The slot a card was played into, top right of the card. */
+.slot-tag {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: #ffd9a0;
+  background: rgba(42, 21, 3, 0.85);
+  border: 1px solid #8a5a2b;
+  border-radius: 8px;
+  padding: 2px 5px;
+}
+
 /* Card backs: the Warden's hand. */
 .card-back {
   background: linear-gradient(160deg, #4a2408, #241105);
@@ -337,7 +449,9 @@ html, body {
 .card.played .card-name { font-size: 11px; }
 .card.played .card-text { font-size: 9px; }
 .card.played .power { font-size: 19px; bottom: 4px; right: 6px; }
-.card.played .kindle-tag { display: none; }
+.card.played .kindle-tag { font-size: 8px; bottom: 4px; left: 4px; }
+.card.played .chain-tag { font-size: 8px; bottom: 4px; left: 4px; }
+.card.played .slot-tag { font-size: 8px; top: 4px; right: 4px; }
 .card.played-by-ai { filter: brightness(0.92); }
 
 /* ---------- Damage floaters & confetti ---------- */

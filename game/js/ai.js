@@ -7,9 +7,12 @@
 //   - a Kindle combo when it holds two cards of one suit,
 //   - gathering embers otherwise.
 // Its plays follow the same rules as the player's: the same ember budget,
-// at most two cards a turn, the same Kindle bonus.
+// at most two cards a turn, the same Kindle bonus, the same battle line
+// (every card goes to the slot that favours its suit), the same chains and
+// the same Ember Surge.
 
 import { SUIT_ASH, SUIT_FLAME, SUIT_SPARK, cardById } from './cards.js';
+import { chainFor, slotForSuit } from './game.js';
 
 export const AI_NAME = 'The Warden';
 
@@ -34,8 +37,9 @@ export function chooseAiIntent(state) {
 }
 
 /**
- * Pick the AI's plays for this turn: up to two card ids, in order, that it can
- * afford with its ember and that follow its intent. Returns an array of ids.
+ * Pick the AI's plays for this turn: up to two { id, slot } pairs, in order,
+ * that it can afford with its ember and that follow its intent. Every card
+ * goes to the slot that favours its suit.
  */
 export function chooseAiPlays(state) {
   const ai = state.ai;
@@ -46,12 +50,14 @@ export function chooseAiPlays(state) {
   const used = new Set();
 
   // Value a card: damage that kills is worth everything; a shield that saves
-  // a life is next; raw power per ember after that.
+  // a life is next; raw power per ember after that. A banked Ignite makes a
+  // Flame worth two more.
   function value(card) {
     const damage = card.suit === SUIT_FLAME ? card.power : 0;
     const shield = card.suit === SUIT_ASH ? card.power : 0;
     let score = card.power / card.cost;
     if (card.suit === SUIT_FLAME && player.life - player.shield <= damage) score += 100;
+    if (card.suit === SUIT_FLAME && ai.ignite) score += 2;
     if (card.suit === SUIT_ASH && ai.life <= 8) score += shield / 2;
     if (card.suit === SUIT_SPARK && ai.hand.length <= 2) score += 2;
     return score;
@@ -62,17 +68,23 @@ export function chooseAiPlays(state) {
   if (affordable.length === 0) return plays;
   affordable.sort((a, b) => value(b) - value(a));
   const first = affordable[0];
-  plays.push(first.id);
+  plays.push({ id: first.id, slot: slotForSuit(first.suit) });
   used.add(first.id);
   ember -= first.cost;
 
   // Second pick: prefer the same suit, to Kindle the combo (+2 on the second
-  // card). Otherwise the best remaining card it can still afford.
+  // card) — or a chain off the first card (Quench, Ignite, Flare). Otherwise
+  // the best remaining card it can still afford.
   const rest = hand.filter((card) => !used.has(card.id) && card.cost <= ember);
   if (rest.length === 0) return plays;
-  const sameSuit = rest.filter((card) => card.suit === first.suit);
-  const pool = sameSuit.length > 0 ? sameSuit : rest;
-  pool.sort((a, b) => value(b) - value(a));
-  plays.push(pool[0].id);
+  function secondValue(card) {
+    let score = value(card);
+    if (card.suit === first.suit) score += 2;
+    if (chainFor(first.suit, card.suit)) score += 1.5;
+    return score;
+  }
+  rest.sort((a, b) => secondValue(b) - secondValue(a));
+  const second = rest[0];
+  plays.push({ id: second.id, slot: slotForSuit(second.suit) });
   return plays;
 }

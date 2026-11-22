@@ -1,10 +1,12 @@
 // Boot and the one loop: EMBERFALL's table, input, and the Warden's turn.
 //
 // The game moves between four screens: title, play, won and lost. The player
-// plays by clicking a card (or keys 1-5), ends the turn with the button or
-// Space/Enter, restarts with R. The Warden answers on a timer: its intent is
-// announced first, then its cards play one at a time, so the player can watch
-// the threat land and answer it.
+// plays by choosing a card (click, or keys 1-5) and then a slot of the battle
+// line (click the slot, keys 1-3, or Enter for the slot that favours the
+// card's suit), ends the turn with the button or Space/Enter, restarts with
+// R. The Warden answers on a timer: its intent is announced first, then its
+// cards play one at a time, so the player can watch the threat land and
+// answer it.
 //
 // ?seed=N fixes the shuffle. ?shot=title|table|win|loss (with &seed=N) stages
 // that scene instead of running the loop: it plays the real rules forward
@@ -19,10 +21,12 @@ import {
   PHASE_PLAY,
   PHASE_TITLE,
   PHASE_WON,
+  SLOTS,
   canPlay,
   createGame,
   endTurn,
   playCard,
+  slotForSuit,
   startGame,
   startTurn,
 } from './game.js';
@@ -38,8 +42,12 @@ const renderer = createRenderer(document);
 const { els } = renderer;
 
 let aiTimer = null;
+// The card the player has chosen and not yet placed into a slot, as its
+// index in the hand — an index, not an id, because a hand can hold two
+// copies of one card and only one of them is chosen.
+let selectedCard = null;
 
-/** What the renderer needs: playable cards, the Kindle suit, and callbacks. */
+/** What the renderer needs: playable cards, the Kindle suit, the chosen card, and callbacks. */
 function uiFor() {
   const playableIds = state.phase === PHASE_PLAY && state.turn === 'player'
     ? state.player.hand.filter((id) => canPlay(state, 'player', id))
@@ -49,7 +57,9 @@ function uiFor() {
   return {
     playableIds,
     kindleSuit,
-    onPlayCard: (id) => playPlayerCard(id),
+    selectedIndex: selectedCard,
+    onPlayCard: (index) => selectPlayerCard(index),
+    onPlaySlot: (slot) => playSelectedToSlot(slot),
     onEndTurn: () => endPlayerTurn(),
   };
 }
@@ -70,10 +80,27 @@ function showDamageIfAny() {
   }
 }
 
-/** The player plays a card; the table updates and the Warden may answer. */
-function playPlayerCard(id) {
+/** The player chooses a card: a click on the chosen card again lets it go. */
+function selectPlayerCard(index) {
   if (state.phase !== PHASE_PLAY || state.turn !== 'player') return;
-  if (!playCard(state, 'player', id)) return;
+  const id = state.player.hand[index];
+  if (!id) return;
+  if (selectedCard === index) {
+    selectedCard = null;
+  } else if (canPlay(state, 'player', id)) {
+    selectedCard = index;
+  }
+  render();
+}
+
+/** The player places the chosen card into a slot of the battle line. */
+function playSelectedToSlot(slot) {
+  if (selectedCard === null) return;
+  const id = state.player.hand[selectedCard];
+  selectedCard = null;
+  if (!id) return;
+  if (state.phase !== PHASE_PLAY || state.turn !== 'player') return;
+  if (!playCard(state, 'player', id, slot)) return;
   showDamageIfAny();
   render();
 }
@@ -81,6 +108,7 @@ function playPlayerCard(id) {
 /** The player ends the turn: the Warden announces its intent, then plays. */
 function endPlayerTurn() {
   if (state.phase !== PHASE_PLAY || state.turn !== 'player') return;
+  selectedCard = null;
   state.intent = null;
   endTurn(state);
   render();
@@ -106,7 +134,7 @@ function runAiTurn() {
       render();
       return;
     }
-    playCard(state, 'ai', plays[step]);
+    playCard(state, 'ai', plays[step].id, plays[step].slot);
     step += 1;
     showDamageIfAny();
     render();
@@ -118,6 +146,7 @@ function runAiTurn() {
 /** Start a fresh duel from the title screen. */
 function newDuel() {
   window.clearTimeout(aiTimer);
+  selectedCard = null;
   const fresh = createGame(Math.floor(Math.random() * 4294967296));
   Object.assign(state, fresh);
   startGame(state);
@@ -139,8 +168,12 @@ document.getElementById('how-button').addEventListener('click', () => {
 document.addEventListener('keydown', (event) => {
   if (event.key >= '1' && event.key <= '5') {
     const index = Number(event.key) - 1;
-    const id = state.player.hand[index];
-    if (id) playPlayerCard(id);
+    if (selectedCard !== null) {
+      // A card is chosen: 1-3 place it into a slot of the battle line.
+      if (index < SLOTS.length) playSelectedToSlot(SLOTS[index].id);
+    } else {
+      selectPlayerCard(index);
+    }
     return;
   }
   if (event.key === ' ' || event.key === 'Enter') {
@@ -149,8 +182,18 @@ document.addEventListener('keydown', (event) => {
       startGame(state);
       render();
     } else if (state.phase === PHASE_PLAY && state.turn === 'player') {
-      endPlayerTurn();
+      if (selectedCard !== null && event.key === 'Enter') {
+        // Enter places the chosen card into the slot that favours its suit.
+        playSelectedToSlot(slotForSuit(cardById(state.player.hand[selectedCard]).suit));
+      } else {
+        endPlayerTurn();
+      }
     }
+    return;
+  }
+  if (event.key === 'Escape') {
+    selectedCard = null;
+    render();
     return;
   }
   if (event.key === 'r' || event.key === 'R') {
@@ -168,29 +211,51 @@ function stageCardToHand(who, cardId) {
   side.hand.push(cardId);
 }
 
-/** A mid-game table: several turns already played, life chipped, shields up. */
+/** A mid-game table: several turns already played, life chipped, shields up.
+ * The frame shows every system at once: the Vanguard plays Kindled, the
+ * Ash-then-Spark chain Ignited and the banked spark fires on the third Flame
+ * of the duel — so the Ember Surge fires too — and the last Flame Lash
+ * Kindles after it. */
 function stageTable() {
   startGame(state);
-  // Player: two Flame plays (Kindled), Warden: one Ash, one Flame.
+  // Turn 1 — the player Kindles two Flame cards into the Vanguard.
   stageCardToHand('player', 'cinder-slash');
   stageCardToHand('player', 'ember-bite');
   stageCardToHand('ai', 'cinder-wall');
   stageCardToHand('ai', 'ember-bite');
-  playCard(state, 'player', 'cinder-slash');
-  playCard(state, 'player', 'ember-bite');
+  playCard(state, 'player', 'cinder-slash', 'vanguard');
+  playCard(state, 'player', 'ember-bite', 'vanguard');
   endTurn(state);
   startTurn(state, 'ai');
-  playCard(state, 'ai', 'cinder-wall');
-  playCard(state, 'ai', 'ember-bite');
+  playCard(state, 'ai', 'cinder-wall', 'hearth');
+  playCard(state, 'ai', 'ember-bite', 'vanguard');
   endTurn(state);
   startTurn(state, 'player');
-  stageCardToHand('player', 'flame-lash');
-  stageCardToHand('player', 'ash-veil');
+  // Turn 2 — Ash into the Hearth, then Spark into the Ember slot: the chain
+  // Ignites, banking +2 on the player's next Flame.
+  stageCardToHand('player', 'cinder-wall');
   stageCardToHand('player', 'spark-draw');
+  stageCardToHand('ai', 'flame-lash');
+  stageCardToHand('ai', 'cinder-wall');
+  playCard(state, 'player', 'cinder-wall', 'hearth');
+  playCard(state, 'player', 'spark-draw', 'ember');
+  endTurn(state);
+  startTurn(state, 'ai');
+  playCard(state, 'ai', 'flame-lash', 'vanguard');
+  playCard(state, 'ai', 'cinder-wall', 'hearth');
+  endTurn(state);
+  startTurn(state, 'player');
+  // Turn 3 — the banked Ignite fires on the third Flame of the duel, so the
+  // Ember Surge fires too, and the Flame Lash Kindles after it. The Warden
+  // is given a little extra life first, so the frame stays a mid-game table
+  // instead of a win.
+  state.ai.life = 18;
+  state.ai.shield = 0;
   stageCardToHand('player', 'ember-bite');
+  stageCardToHand('player', 'flame-lash');
   state.player.ember = 6;
-  playCard(state, 'player', 'flame-lash');
-  playCard(state, 'player', 'ember-bite');
+  playCard(state, 'player', 'ember-bite', 'vanguard');
+  playCard(state, 'player', 'flame-lash', 'vanguard');
   render();
 }
 
@@ -204,7 +269,7 @@ function stageWin() {
   // The table already holds two plays this turn; clear the count so the
   // finishing blow is legal — the table itself stays as it was.
   state.player.playedThisTurn = [];
-  playCard(state, 'player', 'inferno');
+  playCard(state, 'player', 'inferno', 'vanguard');
   render();
 }
 
@@ -217,7 +282,7 @@ function stageLoss() {
   startTurn(state, 'ai');
   stageCardToHand('ai', 'flame-lash');
   state.ai.ember = 6;
-  playCard(state, 'ai', 'flame-lash');
+  playCard(state, 'ai', 'flame-lash', 'vanguard');
   render();
 }
 

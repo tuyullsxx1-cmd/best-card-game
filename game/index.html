@@ -38,8 +38,16 @@
     <div id="intent" class="intent" role="status"></div>
   </div>
 
-  <!-- The middle of the table: what was played, and the tale of the duel. -->
+  <!-- The middle of the table: the brazier, the battle line, what was
+       played, and the tale of the duel. -->
   <div id="center">
+    <div id="brazier" class="hot-0" aria-hidden="true"><svg class="suit-icon"><use href="#icon-flame"></use></svg></div>
+    <div id="battle-line" aria-label="Battle line">
+      <button type="button" class="slot" data-slot="vanguard"><svg class="suit-icon" aria-hidden="true"><use href="#icon-flame"></use></svg><span class="slot-name">Vanguard</span><span class="slot-bonus">Flame +1</span></button>
+      <button type="button" class="slot" data-slot="hearth"><svg class="suit-icon" aria-hidden="true"><use href="#icon-shield"></use></svg><span class="slot-name">Hearth</span><span class="slot-bonus">Ash +2</span></button>
+      <button type="button" class="slot" data-slot="ember"><svg class="suit-icon" aria-hidden="true"><use href="#icon-spark"></use></svg><span class="slot-name">Ember</span><span class="slot-bonus">Spark +1</span></button>
+    </div>
+    <div id="chain-hint" role="status"></div>
     <div id="played-row" aria-label="Cards played this round"></div>
     <div id="log" aria-label="Duel log"></div>
   </div>
@@ -57,11 +65,13 @@
     <div id="ember-row">
       <span id="ember-meter" aria-label="Ember"></span>
       <span id="ember-text">3 ember</span>
+      <span class="surge-label">Surge</span>
+      <span id="surge-meter" aria-label="Ember Surge"></span>
     </div>
     <div id="player-hand" class="hand" aria-label="Your hand"></div>
     <div id="controls">
       <button id="end-turn" type="button">End Turn</button>
-      <span class="hint">Click a card to play it · 1–5 select · Space ends turn · R restarts</span>
+      <span class="hint">Click a card, then a slot · 1–5 select · 1–3 choose slot · Space ends turn · R restarts</span>
     </div>
   </div>
 
@@ -79,9 +89,12 @@
     <button id="start-button" type="button">Start Duel</button>
     <button id="how-button" type="button" class="ghost">How to play</button>
     <div id="how-panel">
-      <p><strong>Each turn:</strong> gain 3 ember, draw 1 card, play up to 2 cards.</p>
+      <p><strong>Each turn:</strong> gain 3 ember, draw 1 card, play up to 2 cards — each into a slot of the battle line.</p>
       <p><strong class="flame-text">Flame</strong> deals damage. <strong class="ash-text">Ash</strong> gains shield. <strong class="spark-text">Spark</strong> draws cards or gains ember.</p>
+      <p><strong>Battle line:</strong> Vanguard favours Flame (+1), Hearth favours Ash (+2), Ember favours Spark (+1).</p>
       <p><strong>Kindle:</strong> play two cards of the same suit in one turn and the second one gets +2.</p>
+      <p><strong>Chains:</strong> Flame then Ash Quenches (+2 shield); Ash then Spark Ignites (your next Flame +2); Spark then Flame Flares (+1 damage, draw 1).</p>
+      <p><strong>Ember Surge:</strong> every third Flame you play in the duel feeds the brazier and returns +1 ember.</p>
       <p>Read the Warden's intent before it strikes — then answer it.</p>
     </div>
   </div>
