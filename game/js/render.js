@@ -158,6 +158,7 @@ export function createRenderer(doc) {
     if (playerSig !== lastPlayerSig) {
       lastPlayerSig = playerSig;
       els.playerHand.innerHTML = '';
+      els.playerHand.classList.toggle('many', player.hand.length > 6);
       player.hand.forEach((id, index) => {
         const card = cardById(id);
         const playable = (ui.playableIds || []).includes(id);

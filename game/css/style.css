@@ -16,7 +16,7 @@ html, body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  padding: 10px 18px 8px;
+  padding: 6px 18px 4px;
   background:
     radial-gradient(ellipse 90% 55% at 50% 108%, rgba(255, 122, 26, 0.30), transparent 65%),
     radial-gradient(ellipse 70% 45% at 50% -8%, rgba(255, 210, 63, 0.10), transparent 60%),
@@ -114,7 +114,7 @@ html, body {
   gap: 10px;
   align-items: center;
   justify-content: center;
-  min-height: 128px;
+  min-height: 122px;
 }
 
 #played-row .card { width: 88px; height: 126px; }
@@ -129,7 +129,7 @@ html, body {
 
 #log p { margin: 1px 0; }
 
-#player-area { display: flex; flex-direction: column; gap: 5px; }
+#player-area { display: flex; flex-direction: column; gap: 3px; }
 #player-area .fighter { justify-content: center; }
 
 #ember-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -154,11 +154,20 @@ html, body {
 
 #player-hand {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: center;
-  min-height: 196px;
-  padding-top: 4px;
+  min-height: 186px;
+  padding-top: 2px;
 }
+
+/* A big hand shrinks so it still fits on the table. */
+.hand.many .card { width: 108px; height: 158px; }
+.hand.many .cost { width: 26px; height: 26px; line-height: 26px; font-size: 15px; }
+.hand.many .suit-band { margin-top: 32px; font-size: 10px; }
+.hand.many .suit-big .suit-icon { width: 42px; height: 42px; }
+.hand.many .card-name { font-size: 13px; }
+.hand.many .card-text { font-size: 11px; }
+.hand.many .power { font-size: 24px; }
 
 #controls { display: flex; align-items: center; justify-content: center; gap: 16px; }
 
@@ -191,8 +200,8 @@ html, body {
 
 .card {
   position: relative;
-  width: 132px;
-  height: 192px;
+  width: 124px;
+  height: 182px;
   border-radius: 12px;
   border: 3px solid #2a1503;
   background: linear-gradient(180deg, #fbf3dd 0%, #f0dfb8 100%);
@@ -252,8 +261,8 @@ html, body {
 
 .suit-icon { width: 15px; height: 15px; fill: currentColor; }
 
-.suit-big { display: block; margin: 8px auto 2px; }
-.suit-big .suit-icon { width: 52px; height: 52px; }
+.suit-big { display: block; margin: 6px auto 2px; }
+.suit-big .suit-icon { width: 48px; height: 48px; }
 .suit-flame .suit-big { color: #ff7a1a; }
 .suit-ash .suit-big { color: #7e93a6; }
 .suit-spark .suit-big { color: #e0a800; }

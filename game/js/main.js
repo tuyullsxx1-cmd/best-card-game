@@ -187,7 +187,10 @@ function stageTable() {
   stageCardToHand('player', 'flame-lash');
   stageCardToHand('player', 'ash-veil');
   stageCardToHand('player', 'spark-draw');
+  stageCardToHand('player', 'ember-bite');
+  state.player.ember = 6;
   playCard(state, 'player', 'flame-lash');
+  playCard(state, 'player', 'ember-bite');
   render();
 }
 
@@ -198,6 +201,9 @@ function stageWin() {
   state.ai.shield = 0;
   stageCardToHand('player', 'inferno');
   state.player.ember = 6;
+  // The table already holds two plays this turn; clear the count so the
+  // finishing blow is legal — the table itself stays as it was.
+  state.player.playedThisTurn = [];
   playCard(state, 'player', 'inferno');
   render();
 }
