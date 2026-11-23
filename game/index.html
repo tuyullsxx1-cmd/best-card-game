@@ -33,6 +33,7 @@
         <span class="life-text" id="ai-life-text">20</span>
       </span>
       <span class="shield-badge" id="ai-shield"></span>
+      <span class="stance-badge" id="ai-stance"></span>
     </div>
     <div id="ai-hand" class="hand backs" aria-label="The Warden's hand"></div>
     <div id="intent" class="intent" role="status"></div>
@@ -95,16 +96,21 @@
       <p><strong>Kindle:</strong> play two cards of the same suit in one turn and the second one gets +2.</p>
       <p><strong>Chains:</strong> Flame then Ash Quenches (+2 shield); Ash then Spark Ignites (your next Flame +2); Spark then Flame Flares (+1 damage, draw 1).</p>
       <p><strong>Ember Surge:</strong> every third Flame you play in the duel feeds the brazier and returns +1 ember.</p>
+      <p><strong>Second wave:</strong> 24 cards now — Ember Lash counts double toward Surge, Cinder Echo repeats your last Chain, Wildfire ignores shield, Ashen Mirror reflects 2 damage, Slot Swap earns its slot bonus anywhere, Chain Link fires the next Chain twice.</p>
+      <p><strong>Stances:</strong> the Warden is AGGRESSIVE 🔥 while its life is above 10 and DEFENSIVE 🛡 at 10 or below — read the badge beside its life before it strikes.</p>
+      <p><strong>Draft:</strong> after every duel, win or lose, pick 1 of 3 cards to add to your deck for the next duel. Your deck grows; the Warden's does not.</p>
       <p>Read the Warden's intent before it strikes — then answer it.</p>
     </div>
   </div>
 </div>
 
-<!-- Win / loss screen. -->
+<!-- Win / loss screen, with the draft for the next duel. -->
 <div id="end-overlay" class="overlay hidden">
   <div class="title-card">
     <h1 id="end-title" class="end-title">VICTORY</h1>
     <p id="end-text" class="tagline"></p>
+    <p id="draft-prompt" class="draft-prompt"></p>
+    <div id="draft-row" class="draft-row"></div>
     <button id="again-button" type="button">Play Again</button>
   </div>
 </div>

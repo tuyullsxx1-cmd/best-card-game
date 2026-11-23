@@ -21,9 +21,13 @@
 // A chain and a Kindle never meet on one card: Kindle needs the same suit
 // twice, a chain needs two suits in a named order. So every second card of
 // a turn is exactly one of Kindle, Quench, Ignite, Flare — or nothing.
-// The first side whose life reaches 0 loses; the other wins.
+// The first side whose life reaches 0 loses; the other wins. Then the
+// duel is not quite over: the winner — and the loser — drafts one of three
+// cards into their deck for the next duel, so a run of duels builds a deck
+// that is yours. The Warden answers in stances (see ai.js): aggressive
+// while it is healthy, defensive when it is hurt.
 
-import { SUIT_ASH, SUIT_FLAME, SUIT_SPARK, buildDeck, cardById, drawCard } from './cards.js';
+import { CARD_POOL, SUIT_ASH, SUIT_FLAME, SUIT_SPARK, buildDeck, cardById, drawCard } from './cards.js';
 
 export const MAX_LIFE = 20;
 export const MAX_EMBER = 10;
@@ -99,8 +103,8 @@ export function createRandom(seed) {
   };
 }
 
-function createSide(random) {
-  const deck = buildDeck(random);
+function createSide(random, extraCards = []) {
+  const deck = buildDeck(random, extraCards);
   const hand = [];
   for (let i = 0; i < STARTING_HAND; i += 1) hand.push(drawCard(deck, [], random));
   return {
@@ -115,13 +119,23 @@ function createSide(random) {
     surge: 0,
     // True just after a Surge fired, so the brazier can burst once.
     surgeFlash: false,
-    // Ignite: banked by an Ash -> Spark chain, spent by the next Flame.
-    ignite: false,
+    // Ignite: how many banked +2s the next Flame carries (Ash -> Spark
+    // chains bank one each; a doubled chain banks two).
+    ignite: 0,
+    // Ashen Mirror: damage reflected the next time this side is hit.
+    reflect: 0,
+    // Surge Spark: the next Flame counts double toward the Surge.
+    surgeNext: false,
+    // Slot Swap: the next card earns its favoured slot bonus in any slot.
+    wildSlot: false,
+    // Chain Link: the next Chain fires twice.
+    chainDouble: false,
   };
 }
 
-/** A fresh duel. `seed` fixes the shuffle, so a shot can be replayed. */
-export function createGame(seed) {
+/** A fresh duel. `seed` fixes the shuffle, so a shot can be replayed.
+ * `extraCards` are drafted cards carried over from earlier duels. */
+export function createGame(seed, extraCards = []) {
   const random = createRandom(seed);
   return {
     seed,
@@ -129,7 +143,7 @@ export function createGame(seed) {
     phase: PHASE_TITLE,
     turn: 'player',
     round: 1,
-    player: createSide(random),
+    player: createSide(random, extraCards),
     ai: createSide(random),
     log: ['The last flame is lit. Two Keepers step to the table.'],
     intent: null,
@@ -138,6 +152,11 @@ export function createGame(seed) {
     kindled: false,
     // The cards played this round, for the table in the middle of the screen.
     table: [],
+    // The last chain fired this duel (for Cinder Echo), and the draft
+    // offered when the duel ends (three card ids, or null before then).
+    lastChain: null,
+    draft: null,
+    drafted: null,
   };
 }
 
@@ -201,36 +220,72 @@ export function playCard(state, who, cardId, slotId) {
 
   const slot = slotId || slotForSuit(card.suit);
   const slotName = SLOTS.find((entry) => entry.id === slot).name;
-  const slotBonus = slotBonusFor(slot, card.suit);
+  // Slot Swap: the next card earns its favoured slot bonus in any slot.
+  const slotBonus = side.wildSlot
+    ? slotBonusFor(slotForSuit(card.suit), card.suit)
+    : slotBonusFor(slot, card.suit);
+  if (side.wildSlot) side.wildSlot = false;
   const kindled = side.playedThisTurn.length === 1 && side.playedThisTurn[0] === card.suit;
   const prevSuit = side.playedThisTurn.length === 1 ? side.playedThisTurn[0] : null;
   const chain = prevSuit ? chainFor(prevSuit, card.suit) : null;
+  // Chain Link: the next Chain fires twice (Quench +4, Flare +2 and two
+  // cards, Ignite banks two +2s). The doubling is spent on this chain.
+  const chainMult = chain && side.chainDouble ? 2 : 1;
+  if (chain) side.chainDouble = false;
   let ignited = false;
   let bonus = slotBonus + (kindled ? KINDLE_BONUS : 0);
-  if (chain === CHAIN_QUENCH) bonus += 2;
-  if (chain === CHAIN_FLARE) bonus += 1;
-  if (card.suit === SUIT_FLAME && side.ignite) {
+  if (chain === CHAIN_QUENCH) bonus += 2 * chainMult;
+  if (chain === CHAIN_FLARE) bonus += 1 * chainMult;
+  if (card.suit === SUIT_FLAME && side.ignite > 0) {
     ignited = true;
-    bonus += 2;
-    side.ignite = false;
+    bonus += 2 * side.ignite;
+    side.ignite = 0;
   }
-  if (chain === CHAIN_IGNITE) side.ignite = true;
+  if (chain === CHAIN_IGNITE) side.ignite += chainMult;
+  // Twin Spark: a Flame played after a Spark in the same turn hits +2 harder.
+  if (card.fx === 'sparkBonus' && side.playedThisTurn.includes(SUIT_SPARK)) bonus += 2;
+  // Stone Song: an Ash played below 10 life shields +3 more.
+  if (card.fx === 'lowLife' && side.life < 10) bonus += 3;
+  // Cinder Echo: repeats the last Chain fired this duel — Quench shields
+  // +2, Ignite banks +2 on the next Flame, Flare hits +1 and draws a card.
+  // It reads the chain from BEFORE this card; this card's own chain then
+  // becomes the last one.
+  const whoName = who === 'player' ? 'You' : 'The Warden';
+  let echoedFlare = false;
+  if (card.fx === 'echo' && state.lastChain) {
+    const echo = state.lastChain;
+    if (echo === CHAIN_QUENCH) {
+      side.shield += 2;
+      state.log.push(`${whoName} echoed Quench — +2 shield.`);
+    } else if (echo === CHAIN_IGNITE) {
+      side.ignite += 1;
+      state.log.push(`${whoName} echoed Ignite — the next Flame gets +2 damage.`);
+    } else if (echo === CHAIN_FLARE) {
+      bonus += 1;
+      echoedFlare = true;
+    }
+  }
+  if (chain) state.lastChain = chain;
   const power = card.power + bonus;
   state.kindled = kindled;
   side.playedThisTurn.push(card.suit);
 
-  // Ember Surge: every third Flame this duel returns an ember.
+  // Ember Surge: every third Flame this duel returns an ember. A Flame
+  // that counts twice (Ember Lash, or a Surge Spark before it) can cross
+  // the line in one step, so the check is a crossing, not a remainder.
   let surged = false;
   if (card.suit === SUIT_FLAME) {
-    side.surge += 1;
-    if (side.surge % SURGE_EVERY === 0) {
+    const surgeInc = card.fx === 'surge2' || side.surgeNext ? 2 : 1;
+    if (side.surgeNext) side.surgeNext = false;
+    const before = side.surge;
+    side.surge += surgeInc;
+    if (Math.floor(side.surge / SURGE_EVERY) > Math.floor(before / SURGE_EVERY)) {
       side.ember = Math.min(MAX_EMBER, side.ember + 1);
       side.surgeFlash = true;
       surged = true;
     }
   }
 
-  const whoName = who === 'player' ? 'You' : 'The Warden';
   const tag = kindled
     ? ' — KINDLED!'
     : chain === CHAIN_QUENCH
@@ -241,7 +296,9 @@ export function playCard(state, who, cardId, slotId) {
           ? ' — IGNITED!'
           : '';
   if (card.suit === SUIT_FLAME) {
-    const absorbed = Math.min(foe.shield, power);
+    // Wildfire ignores shield: the damage goes straight to life, and the
+    // shield stays where it was.
+    const absorbed = card.fx === 'pierce' ? 0 : Math.min(foe.shield, power);
     foe.shield -= absorbed;
     const through = power - absorbed;
     foe.life = Math.max(0, foe.life - through);
@@ -250,17 +307,69 @@ export function playCard(state, who, cardId, slotId) {
       `${whoName} played ${card.name} to ${slotName}${tag} — ${power} damage` +
         (absorbed > 0 ? ` (${absorbed} soaked by shield)` : '') + '.',
     );
-    if (chain === CHAIN_FLARE) {
-      const drawn = drawCard(side.deck, side.discard, state.random);
-      if (drawn) side.hand.push(drawn);
-      state.log.push(`${whoName} flared — drew 1 card.`);
+    // Ashen Mirror: the side that was hit throws 2 damage back at the
+    // attacker, once, the first time a blow lands through.
+    if (through > 0 && foe.reflect > 0) {
+      const reflected = foe.reflect;
+      foe.reflect = 0;
+      side.life = Math.max(0, side.life - reflected);
+      state.log.push(`${whoName} was mirrored — ${reflected} damage reflected back.`);
+    }
+    let flareDraws = 0;
+    if (chain === CHAIN_FLARE) flareDraws += chainMult;
+    if (echoedFlare) flareDraws += 1;
+    if (flareDraws > 0) {
+      for (let i = 0; i < flareDraws; i += 1) {
+        const drawn = drawCard(side.deck, side.discard, state.random);
+        if (drawn) side.hand.push(drawn);
+      }
+      state.log.push(`${whoName} flared — drew ${flareDraws} card${flareDraws > 1 ? 's' : ''}.`);
     }
   } else if (card.suit === SUIT_ASH) {
     side.shield += power;
     state.lastDamage = null;
     state.log.push(`${whoName} played ${card.name} to ${slotName}${tag} — +${power} shield.`);
+    if (card.fx === 'ember') {
+      side.ember = Math.min(MAX_EMBER, side.ember + 2);
+      state.log.push(`${whoName} banked 2 ember with it.`);
+    }
+    if (card.fx === 'reflect') {
+      side.reflect = 2;
+      state.log.push(`${whoName} raised a mirror — the next hit throws 2 damage back.`);
+    }
+    if (card.fx === 'draw') {
+      const drawn = drawCard(side.deck, side.discard, state.random);
+      if (drawn) side.hand.push(drawn);
+      state.log.push(`${whoName} drew 1 card.`);
+    }
   } else if (card.suit === SUIT_SPARK) {
-    if (card.id === 'kindling') {
+    if (card.fx === 'surgeNext') {
+      side.ember = Math.min(MAX_EMBER, side.ember + power);
+      side.surgeNext = true;
+      state.log.push(`${whoName} played ${card.name} to ${slotName}${tag} — +${power} ember. The next Flame counts double toward Surge.`);
+    } else if (card.fx === 'wildSlot') {
+      for (let i = 0; i < power; i += 1) {
+        const drawn = drawCard(side.deck, side.discard, state.random);
+        if (drawn) side.hand.push(drawn);
+      }
+      side.wildSlot = true;
+      state.log.push(`${whoName} played ${card.name} to ${slotName}${tag} — drew ${power}. The next card earns its slot bonus in any slot.`);
+    } else if (card.fx === 'bloom') {
+      for (let i = 0; i < power; i += 1) {
+        const drawn = drawCard(side.deck, side.discard, state.random);
+        if (drawn) side.hand.push(drawn);
+      }
+      const flames = side.hand.filter((id) => cardById(id).suit === SUIT_FLAME).length;
+      side.ember = Math.min(MAX_EMBER, side.ember + flames);
+      state.log.push(`${whoName} played ${card.name} to ${slotName}${tag} — drew ${power}, +${flames} ember for the Flames in hand.`);
+    } else if (card.fx === 'chainDouble') {
+      for (let i = 0; i < power; i += 1) {
+        const drawn = drawCard(side.deck, side.discard, state.random);
+        if (drawn) side.hand.push(drawn);
+      }
+      side.chainDouble = true;
+      state.log.push(`${whoName} played ${card.name} to ${slotName}${tag} — drew ${power}. The next Chain fires twice.`);
+    } else if (card.id === 'kindling') {
       side.ember = Math.min(MAX_EMBER, side.ember + power);
       state.log.push(`${whoName} played ${card.name} to ${slotName}${tag} — +${power} ember.`);
     } else if (card.id === 'bright-idea') {
@@ -280,7 +389,7 @@ export function playCard(state, who, cardId, slotId) {
     state.lastDamage = null;
   }
   if (chain === CHAIN_IGNITE) {
-    state.log.push(`${whoName} ignited — the next Flame gets +2 damage.`);
+    state.log.push(`${whoName} ignited — the next Flame gets +${2 * chainMult} damage.`);
   }
   if (surged) {
     state.log.push(`${whoName} — Ember Surge! +1 ember.`);
@@ -301,14 +410,36 @@ export function endTurn(state) {
   }
 }
 
-/** Has either side's life hit 0? Set the phase and log the result. */
+/** Has either side's life hit 0? Set the phase, offer the draft, log the result. */
 export function checkEnd(state) {
   if (state.phase !== PHASE_PLAY) return;
   if (state.ai.life <= 0) {
     state.phase = PHASE_WON;
     state.log.push('The Warden’s flame goes out. You hold the last flame.');
+    state.draft = pickDraft(state);
   } else if (state.player.life <= 0) {
     state.phase = PHASE_LOST;
     state.log.push('Your flame goes out. The Warden holds the last flame.');
+    state.draft = pickDraft(state);
   }
+}
+
+/** Three random cards offered as a draft when a duel ends. */
+export function pickDraft(state) {
+  const pool = [...CARD_POOL];
+  const draft = [];
+  while (draft.length < 3 && pool.length > 0) {
+    const index = Math.floor(state.random() * pool.length);
+    draft.push(pool.splice(index, 1)[0].id);
+  }
+  return draft;
+}
+
+/** Take one of the three draft cards. Returns false when there is no draft. */
+export function draftCard(state, cardId) {
+  if (!state.draft || state.drafted) return false;
+  if (!state.draft.includes(cardId)) return false;
+  state.drafted = cardId;
+  state.log.push(`You drafted ${cardById(cardId).name} — it joins your deck for the next duel.`);
+  return true;
 }

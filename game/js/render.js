@@ -68,6 +68,7 @@ export function createRenderer(doc) {
     aiLifeFill: doc.getElementById('ai-life-fill'),
     aiLifeText: doc.getElementById('ai-life-text'),
     aiShield: doc.getElementById('ai-shield'),
+    aiStance: doc.getElementById('ai-stance'),
     aiHand: doc.getElementById('ai-hand'),
     intent: doc.getElementById('intent'),
     brazier: doc.getElementById('brazier'),
@@ -88,6 +89,9 @@ export function createRenderer(doc) {
     endOverlay: doc.getElementById('end-overlay'),
     endTitle: doc.getElementById('end-title'),
     endText: doc.getElementById('end-text'),
+    againButton: doc.getElementById('again-button'),
+    draftPrompt: doc.getElementById('draft-prompt'),
+    draftRow: doc.getElementById('draft-row'),
     floaters: doc.getElementById('floaters'),
     confetti: doc.getElementById('confetti'),
     status: doc.getElementById('status'),
@@ -144,7 +148,7 @@ export function createRenderer(doc) {
   /** Embers that fall over a win, the flourish a victory lands with. */
   function burstConfetti() {
     els.confetti.innerHTML = '';
-    for (let i = 0; i < 48; i += 1) {
+    for (let i = 0; i < 80; i += 1) {
       const ember = doc.createElement('span');
       ember.className = 'ember-bit';
       ember.style.left = `${Math.random() * 100}%`;
@@ -173,6 +177,15 @@ export function createRenderer(doc) {
     shieldBadge(els.aiShield, ai.shield);
     shieldBadge(els.playerShield, player.shield);
 
+    // The Warden's stance, beside its life: aggressive while it is healthy,
+    // defensive when it is hurt — icon and word, so it reads at a glance.
+    if (els.aiStance) {
+      const stance = state.aiStance;
+      els.aiStance.textContent = stance ? `${stance === 'defensive' ? '🛡' : '🔥'} ${stance.toUpperCase()}` : '';
+      els.aiStance.classList.toggle('defensive', stance === 'defensive');
+      els.aiStance.classList.toggle('show', Boolean(stance) && state.phase === 'play');
+    }
+
     // The Warden's hand: backs only, one per card, so its size is readable.
     const aiSig = ai.hand.join(',');
     if (aiSig !== lastAiSig) {
@@ -188,6 +201,7 @@ export function createRenderer(doc) {
       lastPlayerSig = playerSig;
       els.playerHand.innerHTML = '';
       els.playerHand.classList.toggle('many', player.hand.length > 6);
+      els.playerHand.classList.toggle('huge', player.hand.length > 11);
       player.hand.forEach((id, index) => {
         const card = cardById(id);
         const playable = (ui.playableIds || []).includes(id);
@@ -302,8 +316,35 @@ export function createRenderer(doc) {
         ? `The Warden's flame goes out. You hold the last flame — ${player.life} life to spare.`
         : `Your flame goes out at ${ai.life} life to the Warden. The embers remember you.`;
       if (won && !els.confetti.hasChildNodes()) burstConfetti();
+      // The draft: three cards, one to keep for the next duel. It is shown
+      // on both endings — a loss still builds the deck.
+      if (els.draftRow) {
+        if (state.drafted) {
+          const picked = cardById(state.drafted);
+          els.draftPrompt.textContent = `Drafted: ${picked.name} — it joins your deck for the next duel.`;
+          els.draftRow.innerHTML = '';
+        } else if (state.draft) {
+          els.draftPrompt.textContent = won
+            ? 'Victory! Draft a card for the next duel — pick one.'
+            : 'Defeat — but the deck grows. Draft a card for the next duel — pick one.';
+          els.draftRow.innerHTML = '';
+          for (const id of state.draft) {
+            const card = cardById(id);
+            const el = cardElement(card, { tag: 'div', role: 'button' });
+            el.classList.add('draft-card');
+            el.addEventListener('click', () => ui.onDraft && ui.onDraft(id));
+            els.draftRow.appendChild(el);
+          }
+        } else {
+          els.draftPrompt.textContent = '';
+          els.draftRow.innerHTML = '';
+        }
+      }
+      if (els.againButton) els.againButton.textContent = state.drafted ? 'Next Duel' : 'Play Again';
     } else {
       els.confetti.innerHTML = '';
+      if (els.draftPrompt) els.draftPrompt.textContent = '';
+      if (els.draftRow) els.draftRow.innerHTML = '';
     }
 
     els.status.textContent =

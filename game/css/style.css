@@ -18,11 +18,11 @@ html, body {
   flex-direction: column;
   padding: 6px 18px 4px;
   background:
-    radial-gradient(ellipse 90% 55% at 50% 108%, rgba(255, 122, 26, 0.38), transparent 65%),
-    radial-gradient(ellipse 62% 42% at 50% 44%, rgba(255, 150, 50, 0.17), transparent 70%),
-    radial-gradient(ellipse 70% 45% at 50% -8%, rgba(255, 210, 63, 0.12), transparent 60%),
-    repeating-linear-gradient(115deg, rgba(255, 190, 110, 0.03) 0 2px, transparent 2px 7px),
-    linear-gradient(180deg, #2c1a10 0%, #211209 55%, #170d06 100%);
+    radial-gradient(ellipse 90% 55% at 50% 108%, rgba(255, 122, 26, 0.5), transparent 65%),
+    radial-gradient(ellipse 62% 42% at 50% 44%, rgba(255, 150, 50, 0.26), transparent 70%),
+    radial-gradient(ellipse 70% 45% at 50% -8%, rgba(255, 210, 63, 0.2), transparent 60%),
+    repeating-linear-gradient(115deg, rgba(255, 190, 110, 0.05) 0 2px, transparent 2px 7px),
+    linear-gradient(180deg, #3d2716 0%, #2e1a0c 55%, #1f1007 100%);
 }
 
 /* ---------- Fighters: name, life bar, shield ---------- */
@@ -82,6 +82,22 @@ html, body {
 }
 
 .shield-badge.has-shield { display: inline-block; }
+
+/* The Warden's stance: a word and an icon, readable at a glance. */
+.stance-badge {
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: #ffd9a0;
+  background: #7a2e00;
+  border: 1px solid #ff9a3d;
+  border-radius: 12px;
+  padding: 3px 10px;
+  display: none;
+}
+
+.stance-badge.show { display: inline-block; }
+.stance-badge.defensive { color: #cfe3f5; background: #2c3944; border-color: #9fb2c3; }
 
 /* ---------- Hands ---------- */
 
@@ -248,6 +264,20 @@ html, body {
 .hand.many .card-text { font-size: 11px; }
 .hand.many .power { font-size: 24px; }
 
+/* A huge hand fans: each card slides under the next, so even twenty cards
+   fit across the table. The cost circle stays visible on every card, and
+   the chosen card pops out of the fan to be read. */
+.hand.huge .card { width: 100px; height: 146px; }
+.hand.huge .card:not(:last-child) { margin-right: -50px; }
+.hand.huge .cost { width: 24px; height: 24px; line-height: 24px; font-size: 14px; }
+.hand.huge .suit-band { margin-top: 28px; font-size: 9px; }
+.hand.huge .suit-big .suit-icon { width: 36px; height: 36px; }
+.hand.huge .card-name { font-size: 12px; }
+.hand.huge .card-text { font-size: 10px; }
+.hand.huge .power { font-size: 20px; }
+.hand .card.selected { z-index: 5; }
+.hand.huge .card.selected { transform: translateY(-34px) scale(1.12); }
+
 #controls { display: flex; align-items: center; justify-content: center; gap: 16px; }
 
 #end-turn {
@@ -295,7 +325,7 @@ html, body {
 }
 
 @keyframes deal-in {
-  from { transform: translateY(48px) rotate(4deg); opacity: 0; }
+  from { transform: translateY(-48px) rotate(-4deg); opacity: 0; }
   to { transform: translateY(0) rotate(0deg); opacity: 1; }
 }
 
@@ -318,9 +348,10 @@ html, body {
   border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #ffd23f, #ff7a1a 75%);
   color: #2a1503;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: bold;
   border: 2px solid #7a2e00;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .suit-band {
@@ -328,7 +359,7 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  margin-top: 38px;
+  margin-top: 30px;
   font-size: 12px;
   font-weight: bold;
   letter-spacing: 2px;
@@ -341,8 +372,8 @@ html, body {
 
 .suit-icon { width: 15px; height: 15px; fill: currentColor; }
 
-.suit-big { display: block; margin: 6px auto 2px; }
-.suit-big .suit-icon { width: 48px; height: 48px; }
+.suit-big { display: block; margin: 4px auto 2px; }
+.suit-big .suit-icon { width: 40px; height: 40px; }
 .suit-flame .suit-big { color: #ff7a1a; }
 .suit-ash .suit-big { color: #7e93a6; }
 .suit-spark .suit-big { color: #e0a800; }
@@ -357,9 +388,9 @@ html, body {
 
 .card-text {
   display: block;
-  font-size: 12.5px;
+  font-size: 14px;
   font-style: italic;
-  color: #5a4632;
+  color: #4a3826;
   margin: 4px 8px 0;
   line-height: 1.25;
 }
@@ -368,9 +399,10 @@ html, body {
   position: absolute;
   bottom: 6px;
   right: 8px;
-  font-size: 30px;
+  font-size: 33px;
   font-weight: bold;
   line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .suit-flame .power { color: #c2410c; }
@@ -435,11 +467,12 @@ html, body {
 
 .back-flame .suit-icon { width: 26px; height: 26px; color: #ff9a3d; }
 
-/* A played card flips onto the table. */
-.card.played { animation: flip-in 0.5s ease backwards; cursor: default; }
+/* A played card slides up from the hand and flips onto the table. */
+.card.played { animation: flip-in 0.55s ease backwards; cursor: default; }
 @keyframes flip-in {
-  from { transform: rotateY(90deg) scale(0.8); opacity: 0; }
-  to { transform: rotateY(0deg) scale(1); opacity: 1; }
+  from { transform: translateY(70px) rotateY(80deg) scale(0.82); opacity: 0; }
+  60% { transform: translateY(-6px) rotateY(8deg) scale(1.02); opacity: 1; }
+  to { transform: translateY(0) rotateY(0deg) scale(1); opacity: 1; }
 }
 
 .card.played .cost { width: 20px; height: 20px; line-height: 20px; font-size: 12px; }
@@ -567,8 +600,54 @@ html, body {
 .spark-text { color: #ffd23f; }
 
 .end-title { font-size: 64px; }
-.end-title.win { color: #ffd23f; text-shadow: 0 0 30px rgba(255, 210, 63, 0.8); }
+.end-title.win {
+  color: #ffd23f;
+  text-shadow: 0 0 30px rgba(255, 210, 63, 0.8);
+  font-size: 76px;
+  letter-spacing: 10px;
+  animation: victory-pop 0.7s cubic-bezier(0.2, 1.6, 0.4, 1) backwards;
+}
+@keyframes victory-pop {
+  from { transform: scale(0.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
 .end-title.loss { color: #9fb2c3; text-shadow: 0 0 30px rgba(159, 178, 195, 0.5); }
+
+/* The draft: the prompt and three cards to pick from after a duel. */
+.draft-prompt {
+  font-size: 17px;
+  font-weight: bold;
+  color: #ffd23f;
+  margin: 10px 0 0;
+  min-height: 0;
+}
+
+.draft-prompt:empty { display: none; }
+
+.draft-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.draft-row:empty { display: none; }
+
+.draft-row .card {
+  width: 104px;
+  height: 182px;
+  animation: deal-in 0.45s ease backwards;
+}
+
+.draft-row .card:hover { transform: translateY(-8px) scale(1.04); outline: 3px solid #ffd23f; outline-offset: 2px; }
+/* A button's children shrink to their content width, so pin the draft
+   card's inner lines to the card's full content width (98px). */
+.draft-row .card .suit-band { margin: 32px 0 0; width: 98px; }
+.draft-row .card .suit-big { margin: 2px 0 1px; width: 98px; }
+.draft-row .card .suit-big .suit-icon { width: 28px; height: 28px; }
+.draft-row .card .card-name { font-size: 13px; margin: 1px 0 0; width: 98px; }
+.draft-row .card .card-text { font-size: 12px; margin: 4px 0 0; width: 98px; }
+.draft-row .card .power { font-size: 24px; }
 
 /* Read aloud, never shown: the status line screen readers announce. */
 #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -41,7 +41,9 @@ export const SUITS = {
   },
 };
 
-// One card of each kind. A deck holds two copies of each: 24 cards.
+// One card of each kind. A deck holds one copy of every card in the pool
+// (24) plus a second copy of the twelve core cards: 36 cards. The first
+// twelve entries are the core set; the second wave bends the systems.
 export const CARD_POOL = [
   // Flame — attack.
   { id: 'ember-bite', name: 'Ember Bite', suit: SUIT_FLAME, cost: 1, power: 2, text: 'Deal 2 damage.' },
@@ -58,6 +60,21 @@ export const CARD_POOL = [
   { id: 'kindling', name: 'Kindling', suit: SUIT_SPARK, cost: 2, power: 3, text: 'Gain 3 ember.' },
   { id: 'bright-idea', name: 'Bright Idea', suit: SUIT_SPARK, cost: 2, power: 2, text: 'Draw 2, gain 1 ember.' },
   { id: 'wild-spark', name: 'Wild Spark', suit: SUIT_SPARK, cost: 3, power: 3, text: 'Draw 3 cards.' },
+  // Flame, second wave — cards that bend the systems instead of just hitting.
+  { id: 'ember-lash', name: 'Ember Lash', suit: SUIT_FLAME, cost: 2, power: 3, fx: 'surge2', text: 'Deal 3. Counts double for Surge.' },
+  { id: 'twin-spark', name: 'Twin Spark', suit: SUIT_FLAME, cost: 3, power: 4, fx: 'sparkBonus', text: 'Deal 4. +2 if you played Spark.' },
+  { id: 'cinder-echo', name: 'Cinder Echo', suit: SUIT_FLAME, cost: 2, power: 2, fx: 'echo', text: 'Deal 2. Repeats your last Chain.' },
+  { id: 'wildfire', name: 'Wildfire', suit: SUIT_FLAME, cost: 4, power: 6, fx: 'pierce', text: 'Deal 6 damage. Ignores shield.' },
+  // Ash, second wave — shield that pays you back.
+  { id: 'banked-ember', name: 'Banked Ember', suit: SUIT_ASH, cost: 2, power: 2, fx: 'ember', text: 'Gain 2 shield and 2 ember.' },
+  { id: 'stone-song', name: 'Stone Song', suit: SUIT_ASH, cost: 3, power: 5, fx: 'lowLife', text: 'Gain 5 shield. +3 below 10 life.' },
+  { id: 'ashen-mirror', name: 'Ashen Mirror', suit: SUIT_ASH, cost: 3, power: 4, fx: 'reflect', text: 'Gain 4 shield. Reflects 2 when hit.' },
+  { id: 'cinder-keep', name: 'Cinder Keep', suit: SUIT_ASH, cost: 4, power: 6, fx: 'draw', text: 'Gain 6 shield. Draw 1 card.' },
+  // Spark, second wave — tricks that bend the next play.
+  { id: 'surge-spark', name: 'Surge Spark', suit: SUIT_SPARK, cost: 2, power: 1, fx: 'surgeNext', text: 'Gain 1 ember. Next Flame: double Surge.' },
+  { id: 'slot-swap', name: 'Slot Swap', suit: SUIT_SPARK, cost: 1, power: 1, fx: 'wildSlot', text: 'Draw 1. Next card: bonus in any slot.' },
+  { id: 'ember-bloom', name: 'Ember Bloom', suit: SUIT_SPARK, cost: 3, power: 3, fx: 'bloom', text: 'Draw 3. +1 ember per Flame.' },
+  { id: 'chain-link', name: 'Chain Link', suit: SUIT_SPARK, cost: 2, power: 2, fx: 'chainDouble', text: 'Draw 2. Next Chain fires twice.' },
 ];
 
 /** Look a card up by id. */
@@ -65,10 +82,12 @@ export function cardById(id) {
   return CARD_POOL.find((card) => card.id === id) ?? null;
 }
 
-/** A fresh shuffled deck: two copies of every card in the pool. */
-export function buildDeck(random) {
+/** A fresh shuffled deck: one copy of every card, a second copy of the core twelve. */
+export function buildDeck(random, extra = []) {
   const deck = [];
-  for (const card of CARD_POOL) deck.push(card.id, card.id);
+  for (const card of CARD_POOL) deck.push(card.id);
+  for (let i = 0; i < 12; i += 1) deck.push(CARD_POOL[i].id);
+  for (const id of extra) deck.push(id);
   for (let i = deck.length - 1; i > 0; i -= 1) {
     const j = Math.floor(random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -92,6 +111,11 @@ export function drawCard(deck, discard, random) {
 /** The effect line a card shows, with its Kindle bonus already added. */
 export function effectText(card, bonus) {
   const power = card.power + (bonus || 0);
+  if (card.fx) {
+    // A second-wave card's first number is always its primary power, so a
+    // bonus (Kindle, slot, chain) raises exactly that number in the text.
+    return card.text.replace(/\d+/, String(power));
+  }
   if (card.suit === SUIT_FLAME) return `Deal ${power} damage.`;
   if (card.suit === SUIT_ASH) return `Gain ${power} shield.`;
   if (card.id === 'spark-draw') return `Draw ${power} cards.`;

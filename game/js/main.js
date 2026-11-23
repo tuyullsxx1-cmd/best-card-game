@@ -15,7 +15,7 @@
 // always gives the same frame.
 
 import { SUIT_FLAME, cardById } from './cards.js';
-import { AI_NAME, chooseAiIntent, chooseAiPlays } from './ai.js';
+import { AI_NAME, chooseAiIntent, chooseAiPlays, chooseAiStance } from './ai.js';
 import {
   PHASE_LOST,
   PHASE_PLAY,
@@ -24,6 +24,7 @@ import {
   SLOTS,
   canPlay,
   createGame,
+  draftCard,
   endTurn,
   playCard,
   slotForSuit,
@@ -38,10 +39,15 @@ const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
 const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
 
 const state = createGame(seed);
+// A handle for play-tests and debugging: the live game state.
+window.__game = state;
 const renderer = createRenderer(document);
 const { els } = renderer;
 
 let aiTimer = null;
+// Drafted cards, carried from duel to duel in this session: the campaign
+// deck grows by one card after every duel, win or lose.
+let campaignExtra = [];
 // The card the player has chosen and not yet placed into a slot, as its
 // index in the hand — an index, not an id, because a hand can hold two
 // copies of one card and only one of them is chosen.
@@ -61,6 +67,7 @@ function uiFor() {
     onPlayCard: (index) => selectPlayerCard(index),
     onPlaySlot: (slot) => playSelectedToSlot(slot),
     onEndTurn: () => endPlayerTurn(),
+    onDraft: (id) => draftPick(id),
   };
 }
 
@@ -115,13 +122,22 @@ function endPlayerTurn() {
   runAiTurn();
 }
 
+/** The player drafts one of the three cards offered after a duel. */
+function draftPick(id) {
+  if (state.phase !== PHASE_WON && state.phase !== PHASE_LOST) return;
+  if (!draftCard(state, id)) return;
+  campaignExtra.push(id);
+  render();
+}
+
 /** The Warden's turn, on a timer so the player watches it land. */
 function runAiTurn() {
   if (state.phase !== PHASE_PLAY || state.turn !== 'ai') return;
   startTurn(state, 'ai');
-  state.intent = chooseAiIntent(state);
+  state.aiStance = chooseAiStance(state);
+  state.intent = chooseAiIntent(state, state.aiStance);
   render();
-  const plays = chooseAiPlays(state);
+  const plays = chooseAiPlays(state, state.aiStance);
   let step = 0;
   const stepMs = 950;
   function nextPlay() {
@@ -143,11 +159,11 @@ function runAiTurn() {
   aiTimer = window.setTimeout(nextPlay, 900);
 }
 
-/** Start a fresh duel from the title screen. */
+/** Start a fresh duel from the title screen, keeping the drafted cards. */
 function newDuel() {
   window.clearTimeout(aiTimer);
   selectedCard = null;
-  const fresh = createGame(Math.floor(Math.random() * 4294967296));
+  const fresh = createGame(Math.floor(Math.random() * 4294967296), campaignExtra);
   Object.assign(state, fresh);
   startGame(state);
   render();
